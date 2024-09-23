@@ -40,13 +40,13 @@ if uploaded_file is not None:
     # Afficher les noms des colonnes
     st.write("Noms des colonnes :", df_urls.columns.tolist())
 
-    # Vérifiez que la colonne 'Address' existe
-    if 'Address' in df_urls.columns:
+    # Vérifiez que la colonne 'Url' existe
+    if 'Url' in df_urls.columns:  # Utilisez 'Url' avec un U majuscule
         # Créer une liste pour stocker les résultats
         data = []
 
         # Récupérer le contenu pour chaque URL
-        for url in df_urls['Address']:  # Changer ici aussi
+        for url in df_urls['Url']:  # Changer ici aussi
             content = get_main_content(url)
             data.append({"URL": url, "Contenu": content})
 
@@ -117,4 +117,4 @@ if uploaded_file is not None:
         csv = df.to_csv(index=False)
         st.download_button("Télécharger les résultats", csv, "pertinence_scores_with_keywords.csv")
     else:
-        st.error("La colonne 'Address' n'existe pas dans le fichier Excel.")
+        st.error("La colonne 'Url' n'existe pas dans le fichier Excel.")
