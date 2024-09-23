@@ -27,9 +27,18 @@ def get_main_content(url):
     except Exception as e:
         return f"Erreur lors de la récupération de {url}: {e}"
 
-# Chargement des URLs depuis un fichier Excel
-file_path = "urls.xlsx"  # Remplacez par le chemin de votre fichier Excel
-df_urls = pd.read_excel(file_path)
+import streamlit as st
+import pandas as pd
+
+st.title("Upload Excel File")
+
+# Uploader le fichier
+uploaded_file = st.file_uploader("Choisissez un fichier Excel", type=["xls", "xlsx"])
+
+if uploaded_file is not None:
+    # Lire le fichier Excel
+    df_urls = pd.read_excel(uploaded_file)
+    st.write(df_urls)  # Affichez le contenu du DataFrame
 
 # Créer une liste pour stocker les résultats
 data = []
