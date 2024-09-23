@@ -23,7 +23,7 @@ def get_main_content(url):
         return f"Erreur lors de la récupération de {url}: {e}"
 
 # Titre de l'application
-st.title("Analyse de la pertinence des URLs avec BERT")
+st.title("Analyse de la pertinence des URLs par rapport à une requête avec BERT")
 
 # Uploader le fichier
 uploaded_file = st.file_uploader("Choisissez un fichier Excel", type=["xls", "xlsx"])
