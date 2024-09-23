@@ -1,120 +1,75 @@
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
-from sentence_transformers import SentenceTransformer, util
-from collections import Counter
-import re
-import nltk
-from nltk.corpus import wordnet
+import torch
+from transformers import BertTokenizer, BertModel
+from sklearn.metrics.pairwise import cosine_similarity
 import streamlit as st
-
-# Assurez-vous d'avoir NLTK installé et d'avoir téléchargé WordNet
-nltk.download('wordnet')
 
 # Fonction pour récupérer le contenu principal
 def get_main_content(url):
     try:
         response = requests.get(url)
-        response.raise_for_status()  # Vérifie que la requête a réussi
+        response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         main_content = soup.find('article') or soup.find('div', {'class': 'main-content'})
         return main_content.get_text(strip=True) if main_content else "Contenu principal non trouvé."
     except Exception as e:
         return f"Erreur lors de la récupération de {url}: {e}"
 
-# Titre de l'application
-st.title("Analyse de la pertinence des URLs avec BERT")
+# Interface Streamlit
+st.title("Analyse de Similarité Cosinus avec BERT")
 
-# Uploader le fichier
-uploaded_file = st.file_uploader("Choisissez un fichier Excel", type=["xls", "xlsx"])
+# Uploader le fichier Excel
+uploaded_file = st.file_uploader("Choisissez un fichier Excel avec les adresses (colonne 'Address')", type=["xls", "xlsx"])
 
-# Saisie de la requête
-query = st.text_input("Entrez votre requête de recherche :", "consultant seo")
+if st.button("Analyser"):
+    if uploaded_file is not None:
+        # Lire le fichier Excel
+        df_urls = pd.read_excel(uploaded_file)
+        
+        if "Address" not in df_urls.columns:
+            st.error("Le fichier Excel doit contenir une colonne nommée 'Address'.")
+        else:
+            urls = df_urls["Address"].tolist()
+            # Créer une liste pour stocker les résultats
+            data = []
 
-if uploaded_file is not None:
-    # Lire le fichier Excel
-    df_urls = pd.read_excel(uploaded_file)
-    st.write("Contenu du fichier Excel :")
-    st.write(df_urls)  # Affichez le contenu du DataFrame
+            # Récupérer le contenu pour chaque URL
+            for url in urls:
+                content = get_main_content(url)
+                data.append({"URL": url, "Contenu": content})
 
-    # Afficher les noms des colonnes
-    st.write("Noms des colonnes :", df_urls.columns.tolist())
+            df = pd.DataFrame(data)
 
-    # Vérifiez que la colonne 'Url' existe
-    if 'Url' in df_urls.columns:  # Utilisez 'Url' avec un U majuscule
-        # Créer une liste pour stocker les résultats
-        data = []
+            # Charger le tokenizer et le modèle BERT
+            tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+            model = BertModel.from_pretrained('bert-base-uncased')
 
-        # Récupérer le contenu pour chaque URL
-        for url in df_urls['Url']:  # Changer ici aussi
-            content = get_main_content(url)
-            data.append({"URL": url, "Contenu": content})
+            # Calculer les embeddings pour chaque contenu
+            embeddings = []
+            for content in df['Contenu']:
+                inputs = tokenizer(content, return_tensors="pt", truncation=True, padding=True)
+                with torch.no_grad():
+                    outputs = model(**inputs)
+                embedding = outputs.last_hidden_state.mean(dim=1).numpy()
+                embeddings.append(embedding)
 
-        # Créer un DataFrame à partir des données
-        df = pd.DataFrame(data)
+            # Convertir la liste d'embeddings en un tableau numpy
+            embeddings_matrix = torch.vstack(embeddings).numpy()
 
-        # Charger le modèle BERT pré-entraîné
-        model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
+            # Calculer la similarité cosinus
+            similarity_matrix = cosine_similarity(embeddings_matrix)
 
-        # Encoder la requête
-        query_embedding = model.encode(query, convert_to_tensor=True)
+            # Créer un DataFrame pour les scores de similarité
+            similarity_df = pd.DataFrame(similarity_matrix, index=df['URL'], columns=df['URL'])
 
-        # Calculer les scores de pertinence pour chaque contenu
-        scores = []
-        keywords_to_add = []
-        keywords_count = []
+            # Afficher le DataFrame de similarité
+            st.write("Scores de Similarité Cosinus:")
+            st.dataframe(similarity_df)
 
-        # Fonction pour obtenir les synonymes
-        def get_synonyms(word):
-            synonyms = set()
-            for syn in wordnet.synsets(word):
-                for lemma in syn.lemmas():
-                    synonyms.add(lemma.name())  # Ajoute les synonymes
-            return synonyms
-
-        # Fonction pour convertir un dictionnaire en chaîne de caractères
-        def dict_to_str(counts):
-            return ', '.join([f"{k}: {v}" for k, v in counts.items()])
-
-        # Extraire les mots-clés de la requête
-        query_keywords = query.lower().split()
-        query_word_counts = Counter(query_keywords)
-
-        for content in df['Contenu']:
-            content_embedding = model.encode(content, convert_to_tensor=True)
-            score = util.pytorch_cos_sim(query_embedding, content_embedding).item()
-            scores.append(score)
-
-            # Nettoyer et analyser les mots du contenu
-            content_cleaned = re.findall(r'\w+', content.lower())
-            content_word_counts = Counter(content_cleaned)
-            
-            # Identifier les mots-clés manquants et calculer les occurrences à ajouter
-            missing_keywords = {}
-            for keyword, count in query_word_counts.items():
-                current_count = content_word_counts.get(keyword, 0)
-                if current_count < count:
-                    missing_keywords[keyword] = count - current_count
-                    
-                    # Ajouter les synonymes
-                    for synonym in get_synonyms(keyword):
-                        if synonym not in content_word_counts:
-                            missing_keywords[synonym] = 1  # Proposer d'ajouter un synonyme
-
-            keywords_to_add.append(", ".join(missing_keywords.keys()))
-            keywords_count.append(missing_keywords)
-
-        # Ajouter les scores, mots-clés et occurrences au DataFrame
-        df['Score de pertinence'] = scores
-        df['Mots-clés à ajouter'] = keywords_to_add
-        df['Occurrences à ajouter'] = [dict_to_str(counts) for counts in keywords_count]
-
-        # Afficher le DataFrame avec les scores et suggestions de mots-clés
-        st.write("Résultats de l'analyse :")
-        st.write(df[['URL', 'Score de pertinence', 'Mots-clés à ajouter', 'Occurrences à ajouter']])
-
-        # Optionnel : Sauvegarder le DataFrame dans un fichier CSV
-        csv = df.to_csv(index=False)
-        st.download_button("Télécharger les résultats", csv, "pertinence_scores_with_keywords.csv")
+            # Optionnel : Sauvegarder le DataFrame de similarité dans un fichier CSV
+            similarity_df.to_csv("similarity_scores.csv", index=False)
+            st.success("Les scores de similarité ont été sauvegardés dans 'similarity_scores.csv'.")
     else:
-        st.error("La colonne 'Url' n'existe pas dans le fichier Excel.")
+        st.error("Veuillez uploader un fichier Excel avec les adresses.")
