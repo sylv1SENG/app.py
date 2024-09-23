@@ -28,6 +28,9 @@ st.title("Analyse de la pertinence des URLs avec BERT")
 # Uploader le fichier
 uploaded_file = st.file_uploader("Choisissez un fichier Excel", type=["xls", "xlsx"])
 
+# Saisie de la requête
+query = st.text_input("Entrez votre requête de recherche :", "consultant seo")
+
 if uploaded_file is not None:
     # Lire le fichier Excel
     df_urls = pd.read_excel(uploaded_file)
@@ -52,9 +55,6 @@ if uploaded_file is not None:
 
         # Charger le modèle BERT pré-entraîné
         model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
-
-        # Requête Google
-        query = "consultant seo"
 
         # Encoder la requête
         query_embedding = model.encode(query, convert_to_tensor=True)
