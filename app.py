@@ -34,6 +34,9 @@ if uploaded_file is not None:
     st.write("Contenu du fichier Excel :")
     st.write(df_urls)  # Affichez le contenu du DataFrame
 
+    # Afficher les noms des colonnes
+    st.write("Noms des colonnes :", df_urls.columns.tolist())
+
     # Vérifiez que la colonne 'URL' existe
     if 'URL' in df_urls.columns:
         # Créer une liste pour stocker les résultats
