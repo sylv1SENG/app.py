@@ -1,9 +1,3 @@
-# FINAL BERT avec upload EXCEL
-#BERT (Bidirectional Encoder Representations from Transformers) est un modèle NLP avancé qui comprend le contexte et la signification des mots. 
-#Il permet de comparer des textes sur le plan sémantique, et non seulement en termes de fréquence des mots-clés.
-#Avec BERT, vous pouvez mesurer la pertinence des textes en fonction de leur similarité sémantique par rapport à une requête.
-
-
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -12,6 +6,7 @@ from collections import Counter
 import re
 import nltk
 from nltk.corpus import wordnet
+import streamlit as st
 
 # Assurez-vous d'avoir NLTK installé et d'avoir téléchargé WordNet
 nltk.download('wordnet')
@@ -27,10 +22,8 @@ def get_main_content(url):
     except Exception as e:
         return f"Erreur lors de la récupération de {url}: {e}"
 
-import streamlit as st
-import pandas as pd
-
-st.title("Upload Excel File")
+# Titre de l'application
+st.title("Analyse de la pertinence des URLs avec BERT")
 
 # Uploader le fichier
 uploaded_file = st.file_uploader("Choisissez un fichier Excel", type=["xls", "xlsx"])
@@ -38,80 +31,87 @@ uploaded_file = st.file_uploader("Choisissez un fichier Excel", type=["xls", "xl
 if uploaded_file is not None:
     # Lire le fichier Excel
     df_urls = pd.read_excel(uploaded_file)
+    st.write("Contenu du fichier Excel :")
     st.write(df_urls)  # Affichez le contenu du DataFrame
 
-# Créer une liste pour stocker les résultats
-data = []
+    # Vérifiez que la colonne 'URL' existe
+    if 'URL' in df_urls.columns:
+        # Créer une liste pour stocker les résultats
+        data = []
 
-# Récupérer le contenu pour chaque URL
-for url in df_urls['URL']:
-    content = get_main_content(url)
-    data.append({"URL": url, "Contenu": content})
+        # Récupérer le contenu pour chaque URL
+        for url in df_urls['URL']:
+            content = get_main_content(url)
+            data.append({"URL": url, "Contenu": content})
 
-# Créer un DataFrame à partir des données
-df = pd.DataFrame(data)
+        # Créer un DataFrame à partir des données
+        df = pd.DataFrame(data)
 
-# Charger le modèle BERT pré-entraîné
-model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
+        # Charger le modèle BERT pré-entraîné
+        model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
 
-# Requête Google
-query = "consultant seo"
+        # Requête Google
+        query = "consultant seo"
 
-# Encoder la requête
-query_embedding = model.encode(query, convert_to_tensor=True)
+        # Encoder la requête
+        query_embedding = model.encode(query, convert_to_tensor=True)
 
-# Calculer les scores de pertinence pour chaque contenu
-scores = []
-keywords_to_add = []
-keywords_count = []
+        # Calculer les scores de pertinence pour chaque contenu
+        scores = []
+        keywords_to_add = []
+        keywords_count = []
 
-# Fonction pour obtenir les synonymes
-def get_synonyms(word):
-    synonyms = set()
-    for syn in wordnet.synsets(word):
-        for lemma in syn.lemmas():
-            synonyms.add(lemma.name())  # Ajoute les synonymes
-    return synonyms
+        # Fonction pour obtenir les synonymes
+        def get_synonyms(word):
+            synonyms = set()
+            for syn in wordnet.synsets(word):
+                for lemma in syn.lemmas():
+                    synonyms.add(lemma.name())  # Ajoute les synonymes
+            return synonyms
 
-# Fonction pour convertir un dictionnaire en chaîne de caractères
-def dict_to_str(counts):
-    return ', '.join([f"{k}: {v}" for k, v in counts.items()])
+        # Fonction pour convertir un dictionnaire en chaîne de caractères
+        def dict_to_str(counts):
+            return ', '.join([f"{k}: {v}" for k, v in counts.items()])
 
-# Extraire les mots-clés de la requête
-query_keywords = query.lower().split()
-query_word_counts = Counter(query_keywords)
+        # Extraire les mots-clés de la requête
+        query_keywords = query.lower().split()
+        query_word_counts = Counter(query_keywords)
 
-for content in df['Contenu']:
-    content_embedding = model.encode(content, convert_to_tensor=True)
-    score = util.pytorch_cos_sim(query_embedding, content_embedding).item()
-    scores.append(score)
+        for content in df['Contenu']:
+            content_embedding = model.encode(content, convert_to_tensor=True)
+            score = util.pytorch_cos_sim(query_embedding, content_embedding).item()
+            scores.append(score)
 
-    # Nettoyer et analyser les mots du contenu
-    content_cleaned = re.findall(r'\w+', content.lower())
-    content_word_counts = Counter(content_cleaned)
-    
-    # Identifier les mots-clés manquants et calculer les occurrences à ajouter
-    missing_keywords = {}
-    for keyword, count in query_word_counts.items():
-        current_count = content_word_counts.get(keyword, 0)
-        if current_count < count:
-            missing_keywords[keyword] = count - current_count
+            # Nettoyer et analyser les mots du contenu
+            content_cleaned = re.findall(r'\w+', content.lower())
+            content_word_counts = Counter(content_cleaned)
             
-            # Ajouter les synonymes
-            for synonym in get_synonyms(keyword):
-                if synonym not in content_word_counts:
-                    missing_keywords[synonym] = 1  # Proposer d'ajouter un synonyme
+            # Identifier les mots-clés manquants et calculer les occurrences à ajouter
+            missing_keywords = {}
+            for keyword, count in query_word_counts.items():
+                current_count = content_word_counts.get(keyword, 0)
+                if current_count < count:
+                    missing_keywords[keyword] = count - current_count
+                    
+                    # Ajouter les synonymes
+                    for synonym in get_synonyms(keyword):
+                        if synonym not in content_word_counts:
+                            missing_keywords[synonym] = 1  # Proposer d'ajouter un synonyme
 
-    keywords_to_add.append(", ".join(missing_keywords.keys()))
-    keywords_count.append(missing_keywords)
+            keywords_to_add.append(", ".join(missing_keywords.keys()))
+            keywords_count.append(missing_keywords)
 
-# Ajouter les scores, mots-clés et occurrences au DataFrame
-df['Score de pertinence'] = scores
-df['Mots-clés à ajouter'] = keywords_to_add
-df['Occurrences à ajouter'] = [dict_to_str(counts) for counts in keywords_count]
+        # Ajouter les scores, mots-clés et occurrences au DataFrame
+        df['Score de pertinence'] = scores
+        df['Mots-clés à ajouter'] = keywords_to_add
+        df['Occurrences à ajouter'] = [dict_to_str(counts) for counts in keywords_count]
 
-# Afficher le DataFrame avec les scores et suggestions de mots-clés
-print(df[['URL', 'Score de pertinence', 'Mots-clés à ajouter', 'Occurrences à ajouter']])
+        # Afficher le DataFrame avec les scores et suggestions de mots-clés
+        st.write("Résultats de l'analyse :")
+        st.write(df[['URL', 'Score de pertinence', 'Mots-clés à ajouter', 'Occurrences à ajouter']])
 
-# Optionnel : Sauvegarder le DataFrame dans un fichier CSV
-df.to_csv("pertinence_scores_with_keywords.csv", index=False)
+        # Optionnel : Sauvegarder le DataFrame dans un fichier CSV
+        csv = df.to_csv(index=False)
+        st.download_button("Télécharger les résultats", csv, "pertinence_scores_with_keywords.csv")
+    else:
+        st.error("La colonne 'URL' n'existe pas dans le fichier Excel.")
